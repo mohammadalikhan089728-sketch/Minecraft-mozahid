@@ -1,361 +1,71 @@
-/* =========================================
-   1. GLOBAL RESETS & FONTS
-   ========================================= */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
 
 * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
+    margin: 0; padding: 0; box-sizing: border-box;
     font-family: 'Poppins', sans-serif;
-    user-select: none; /* Text select hone se rokega */
-    -webkit-user-select: none;
-    touch-action: none; /* Mobile par scroll/zoom rokega */
+    user-select: none; -webkit-user-select: none; touch-action: none;
 }
 
 body, html {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background-color: #000;
-    color: #fff;
+    width: 100%; height: 100%; overflow: hidden; background-color: #000; color: #fff;
 }
 
-/* Utility class to hide elements */
-.hidden {
-    display: none !important;
-}
+.hidden { display: none !important; }
 
-/* =========================================
-   2. GAME CANVAS & LOADING SCREEN
-   ========================================= */
 #game-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100dvh; /* Mobile browsers ke liye best height */
-    z-index: 1;
+    position: absolute; top: 0; left: 0;
+    width: 100vw; height: 100dvh; z-index: 1;
 }
 
 #loading-screen {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100dvh;
-    background: #111;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    z-index: 100;
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100dvh;
+    background: #111; display: flex; flex-direction: column;
+    justify-content: center; align-items: center; z-index: 100;
 }
+#loading-screen h1 { font-size: 2.5rem; color: #4ade80; text-shadow: 0 0 10px #4ade80; margin-bottom: 20px; }
+.loader { border: 5px solid #333; border-top: 5px solid #4ade80; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-#loading-screen h1 {
-    font-size: 3rem;
-    color: #4ade80; /* Nature Green */
-    text-shadow: 0 0 10px #4ade80;
-    margin-bottom: 20px;
-}
-
-.loader {
-    border: 5px solid #333;
-    border-top: 5px solid #4ade80;
-    border-radius: 50%;
-    width: 50px;
-    height: 50px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* =========================================
-   3. LOBBY SCREEN (Nature Theme + Glass Effect)
-   ========================================= */
 #lobby-screen {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100dvh;
-    z-index: 50;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    /* Ek shandar Nature Background */
+    position: absolute; top: 0; left: 0; width: 100vw; height: 100dvh; z-index: 50;
+    display: flex; justify-content: center; align-items: center;
     background: url('https://images.unsplash.com/photo-1472214103451-9374bd1c798e?q=80&w=2070&auto=format&fit=crop') no-repeat center center/cover;
 }
-
-/* Background ko thoda dark karne ke liye overlay */
-#lobby-screen::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: -1;
-}
-
+#lobby-screen::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.4); z-index: -1; }
 .lobby-content {
-    background: rgba(20, 20, 20, 0.6);
-    backdrop-filter: blur(12px); /* Glass Effect */
-    -webkit-backdrop-filter: blur(12px);
-    padding: 40px;
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    text-align: center;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    background: rgba(20, 20, 20, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    padding: 40px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2);
+    text-align: center; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
+.lobby-content h1 { font-size: 2.2rem; margin-bottom: 5px; color: #fff; }
+.lobby-content p { color: #ccc; margin-bottom: 25px; font-size: 0.9rem; }
+#player-name-input { width: 100%; padding: 15px; border-radius: 10px; border: 1px solid #555; background: rgba(0,0,0,0.5); color: #fff; font-size: 1rem; margin-bottom: 20px; outline: none; text-align: center; }
+#player-name-input:focus { border-color: #4ade80; }
+#join-btn { width: 100%; padding: 15px; border: none; border-radius: 10px; background: #4ade80; color: #000; font-size: 1.1rem; font-weight: 800; cursor: pointer; transition: 0.2s; }
+#join-btn:active { transform: scale(0.95); background: #22c55e; }
 
-.lobby-content h1 {
-    font-size: 2.2rem;
-    margin-bottom: 5px;
-    color: #fff;
-    text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
-}
+#ui-layer { position: absolute; top: 0; left: 0; width: 100vw; height: 100dvh; z-index: 10; pointer-events: none; }
+#crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: rgba(255, 255, 255, 0.7); }
+#player-stats { position: absolute; bottom: 80px; left: 20px; display: flex; flex-direction: column; gap: 5px; }
+.bar-container { width: 150px; height: 12px; background: rgba(0, 0, 0, 0.5); border: 1px solid #333; border-radius: 4px; overflow: hidden; }
+.bar { height: 100%; width: 100%; transition: width 0.3s ease; }
+.bar.health { background: #ef4444; }
+.bar.hunger { background: #f59e0b; }
+#multiplayer-info { position: absolute; top: 20px; right: 20px; background: rgba(0,0,0,0.5); padding: 8px 15px; border-radius: 8px; font-size: 0.8rem; }
 
-.lobby-content p {
-    color: #ccc;
-    margin-bottom: 25px;
-    font-size: 0.9rem;
-}
-
-#player-name-input {
-    width: 100%;
-    padding: 15px;
-    border-radius: 10px;
-    border: 1px solid #555;
-    background: rgba(0,0,0,0.5);
-    color: #fff;
-    font-size: 1rem;
-    margin-bottom: 20px;
-    outline: none;
-    text-align: center;
-}
-
-#player-name-input:focus {
-    border-color: #4ade80;
-}
-
-#join-btn {
-    width: 100%;
-    padding: 15px;
-    border: none;
-    border-radius: 10px;
-    background: #4ade80;
-    color: #000;
-    font-size: 1.1rem;
-    font-weight: 800;
-    cursor: pointer;
-    transition: 0.2s;
-}
-
-#join-btn:active {
-    transform: scale(0.95);
-    background: #22c55e;
-}
-
-#server-status {
-    margin-top: 15px;
-    font-size: 0.8rem;
-    color: #a3a3a3;
-}
-
-/* =========================================
-   4. IN-GAME HUD (Heads Up Display)
-   ========================================= */
-#ui-layer {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100dvh;
-    z-index: 10;
-    pointer-events: none; /* Mouse click game canvas par jayega, UI par nahi */
-}
-
-/* Crosshair */
-#crosshair {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 24px;
-    color: rgba(255, 255, 255, 0.7);
-    font-weight: 300;
-}
-
-/* Health & Hunger Bars */
-#player-stats {
-    position: absolute;
-    bottom: 80px;
-    left: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-
-.bar-container {
-    width: 150px;
-    height: 12px;
-    background: rgba(0, 0, 0, 0.5);
-    border: 1px solid #333;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.bar {
-    height: 100%;
-    width: 100%;
-    transition: width 0.3s ease;
-}
-
-.bar.health { background: #ef4444; } /* Red */
-.bar.hunger { background: #f59e0b; } /* Orange */
-
-/* Multiplayer Info */
-#multiplayer-info {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    background: rgba(0,0,0,0.5);
-    padding: 8px 15px;
-    border-radius: 8px;
-    font-size: 0.8rem;
-    display: flex;
-    gap: 15px;
-}
-
-#ping-display { color: #4ade80; }
-
-/* =========================================
-   5. MOBILE TOUCH CONTROLS
-   ========================================= */
-#mobile-controls {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-}
-
-/* Joystick (Bottom Left) */
-#joystick-zone {
-    position: absolute;
-    bottom: 30px;
-    left: 30px;
-    width: 120px;
-    height: 120px;
-    pointer-events: auto;
-}
-
-#joystick-base {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    position: relative;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-
-#joystick-knob {
-    width: 50px;
-    height: 50px;
-    background: rgba(255, 255, 255, 0.6);
-    border-radius: 50%;
-    position: absolute;
-}
-
-/* Action Buttons (Bottom Right) */
-#action-buttons {
-    position: absolute;
-    bottom: 30px;
-    right: 30px;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 15px;
-    pointer-events: auto;
-}
-
-.action-btn {
-    width: 70px;
-    height: 70px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.4);
-    background: rgba(0, 0, 0, 0.4);
-    color: #fff;
-    font-weight: 600;
-    font-size: 0.9rem;
-    backdrop-filter: blur(4px);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-}
-
-.action-btn:active {
-    background: rgba(255, 255, 255, 0.3);
-    transform: scale(0.9);
-}
-
-#btn-jump { grid-column: span 2; width: 100%; border-radius: 15px; height: 50px; margin-top: 5px;}
+#mobile-controls { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+#joystick-zone { position: absolute; bottom: 30px; left: 30px; width: 120px; height: 120px; pointer-events: auto; }
+#joystick-base { width: 100%; height: 100%; border-radius: 50%; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.3); position: relative; display: flex; justify-content: center; align-items: center; }
+#joystick-knob { width: 50px; height: 50px; background: rgba(255, 255, 255, 0.6); border-radius: 50%; position: absolute; }
+#action-buttons { position: absolute; bottom: 30px; right: 30px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; pointer-events: auto; }
+.action-btn { width: 70px; height: 70px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(0, 0, 0, 0.4); color: #fff; font-weight: 600; font-size: 0.9rem; backdrop-filter: blur(4px); display: flex; justify-content: center; align-items: center; cursor: pointer; }
+.action-btn:active { background: rgba(255, 255, 255, 0.3); transform: scale(0.9); }
+#btn-jump { grid-column: span 2; width: 100%; border-radius: 15px; height: 50px; margin-top: 5px; }
 #btn-mine { border-color: #ef4444; }
 #btn-place { border-color: #3b82f6; }
 
-/* =========================================
-   6. HOTBAR (Inventory)
-   ========================================= */
-#hotbar {
-    position: absolute;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    display: flex;
-    gap: 5px;
-    background: rgba(0,0,0,0.4);
-    padding: 5px;
-    border-radius: 8px;
-    pointer-events: auto;
-}
+#hotbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; background: rgba(0,0,0,0.4); padding: 5px; border-radius: 8px; pointer-events: auto; }
+.slot { width: 50px; height: 50px; background: rgba(255, 255, 255, 0.1); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 5px; }
+.slot.active { border-color: #fff; background: rgba(255, 255, 255, 0.3); }
 
-.slot {
-    width: 50px;
-    height: 50px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-radius: 5px;
-}
-
-.slot.active {
-    border-color: #fff;
-    background: rgba(255, 255, 255, 0.3);
-}
-
-/* Chat Button */
-#chat-btn {
-    position: absolute;
-    bottom: 90px;
-    right: 30px;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
-    font-size: 1.5rem;
-    pointer-events: auto;
-}
-
-/* Media Query for larger screens (Desktop) */
-@media (min-width: 768px) {
-    #mobile-controls { display: none; } /* Desktop par joystick hide kar do */
-}
+@media (min-width: 768px) { #mobile-controls { display: none; } }
