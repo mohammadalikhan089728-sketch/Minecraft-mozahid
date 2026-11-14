@@ -1,322 +1,101 @@
-import * as THREE from 'three';
-
-// =========================================
-// 1. FIREBASE SETUP (From index.html)
-// =========================================
-const db = window.firebaseDB;
-const ref = window.firebaseRef;
-const set = window.firebaseSet;
-const onValue = window.firebaseOnValue;
-const onDisconnect = window.firebaseOnDisconnect;
-
-// =========================================
-// 2. GAME VARIABLES
-// =========================================
-let scene, camera, renderer;
-let localPlayer;
-const otherPlayers = {}; // Store other players' 3D models
-
-const playerSpeed = 0.2;
-const gravity = -0.02;
-const jumpForce = 0.5;
-let velocityY = 0;
-let isGrounded = true;
-
-// UI Elements
-const lobbyScreen = document.getElementById('lobby-screen');
-const loadingScreen = document.getElementById('loading-screen');
-const uiLayer = document.getElementById('ui-layer');
-const joinBtn = document.getElementById('join-btn');
-const nameInput = document.getElementById('player-name-input');
-
-// Player Data
-let myId = "player_" + Math.floor(Math.random() * 1000000);
-let myName = "Guest";
-
-// Input States
-const keys = { w: false, a: false, s: false, d: false, space: false };
-let joystickData = { x: 0, y: 0 };
-
-// =========================================
-// 3. INITIALIZE 3D SCENE
-// =========================================
-function init() {
-    // Scene setup
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87CEEB); // Aasman ka color
-    scene.fog = new THREE.Fog(0x87CEEB, 10, 50); // Fog se door ki cheezein dhup jayengi
-
-    // Camera setup
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 5, 10);
-
-    // Renderer setup
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true; // Shadows on
-    document.getElementById('game-container').appendChild(renderer.domElement);
-
-    // Lights (Realistic feel ke liye)
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    scene.add(ambientLight);
-
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1);
-    sunLight.position.set(10, 20, 10);
-    sunLight.castShadow = true;
-    scene.add(sunLight);
-
-    // Basic Ground (Zameen)
-    const groundGeo = new THREE.PlaneGeometry(100, 100);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x228B22 }); // Grass Green
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    ground.receiveShadow = true;
-    scene.add(ground);
-
-    // Create Local Player Model (Aap)
-    localPlayer = createPlayerMesh(0xff0000); // Red box for you
-    scene.add(localPlayer);
-
-    // Hide loading screen
-    loadingScreen.classList.add('hidden');
-
-    // Start Animation Loop
-    animate();
-}
-
-// =========================================
-// 4. CREATE PLAYER 3D MODEL
-// =========================================
-function createPlayerMesh(color) {
-    // Ek simple block (Minecraft style player)
-    const geometry = new THREE.BoxGeometry(1, 2, 1);
-    const material = new THREE.MeshStandardMaterial({ color: color });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.castShadow = true;
-    mesh.position.set(0, 1, 0); // Box ki height ke hisaab se
-    return mesh;
-}
-
-// =========================================
-// 5. FIREBASE MULTIPLAYER LOGIC
-// =========================================
-function joinMultiplayer() {
-    myName = nameInput.value.trim() || "Player_" + Math.floor(Math.random() * 1000);
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Minecraft Mozahid</title>
     
-    // UI change
-    lobbyScreen.classList.add('hidden');
-    uiLayer.classList.remove('hidden');
+    <!-- CSS Link (Bina folder ke) -->
+    <link rel="stylesheet" href="style.css">
 
-    const playerRef = ref(db, 'players/' + myId);
-
-    // Player data Firebase mein save karo
-    set(playerRef, {
-        name: myName,
-        x: localPlayer.position.x,
-        y: localPlayer.position.y,
-        z: localPlayer.position.z
-    });
-
-    // Jab player game se nikle, toh use database se hatao
-    onDisconnect(playerRef).remove();
-
-    // Listen for other players
-    onValue(ref(db, 'players'), (snapshot) => {
-        const data = snapshot.val();
-        if (!data) return;
-
-        // Update online count
-        document.getElementById('online-players').innerText = `Players: ${Object.keys(data).length}`;
-
-        for (let id in data) {
-            if (id !== myId) {
-                // Agar dusra player hai
-                if (!otherPlayers[id]) {
-                    // Agar scene mein nahi hai, toh naya box banao
-                    const otherMesh = createPlayerMesh(0x0000ff); // Blue box for others
-                    scene.add(otherMesh);
-                    otherPlayers[id] = otherMesh;
-                }
-                // Uski position update karo (lerp se smooth movement)
-                otherPlayers[id].position.lerp(new THREE.Vector3(data[id].x, data[id].y, data[id].z), 0.2);
-            } else if (!data[id]) {
-                // Agar koi player disconnect ho gaya
-                if (otherPlayers[id]) {
-                    scene.remove(otherPlayers[id]);
-                    delete otherPlayers[id];
-                }
+    <!-- Three.js Load Karne ke liye (Import Map) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
             }
         }
-    });
+    </script>
 
-    // Interval to update MY position to Firebase (har 100ms mein)
-    setInterval(() => {
-        if(localPlayer) {
-            set(playerRef, {
-                name: myName,
-                x: localPlayer.position.x,
-                y: localPlayer.position.y,
-                z: localPlayer.position.z
-            });
-        }
-    }, 100);
-}
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, set, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// =========================================
-// 6. CONTROLS (Keyboard & Mobile Joystick)
-// =========================================
-// Keyboard
-window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'w') keys.w = true;
-    if (e.key.toLowerCase() === 'a') keys.a = true;
-    if (e.key.toLowerCase() === 's') keys.s = true;
-    if (e.key.toLowerCase() === 'd') keys.d = true;
-    if (e.code === 'Space') keys.space = true;
-});
+        const FIREBASE_CONFIG = {
+            apiKey: "AIzaSyB-UdPysk2hYPf75cx8IAkJzivpbuCQcnc",
+            authDomain: "v8-wala-engine-hai.firebaseapp.com",
+            databaseURL: "https://v8-wala-engine-hai-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "v8-wala-engine-hai",
+            storageBucket: "v8-wala-engine-hai.appspot.com",
+            messagingSenderId: "67142036156",
+            appId: "1:67142036156:web:dbc35b215283e1cff67eb9"
+        };
 
-window.addEventListener('keyup', (e) => {
-    if (e.key.toLowerCase() === 'w') keys.w = false;
-    if (e.key.toLowerCase() === 'a') keys.a = false;
-    if (e.key.toLowerCase() === 's') keys.s = false;
-    if (e.key.toLowerCase() === 'd') keys.d = false;
-    if (e.code === 'Space') keys.space = false;
-});
+        const app = initializeApp(FIREBASE_CONFIG);
+        const db = getDatabase(app);
 
-// Mobile Joystick (Touch Events)
-const joystickBase = document.getElementById('joystick-base');
-const joystickKnob = document.getElementById('joystick-knob');
-const joystickZone = document.getElementById('joystick-zone');
-const maxDistance = 35; // Knob kitna hil sakta hai
+        window.firebaseDB = db;
+        window.firebaseRef = ref;
+        window.firebaseSet = set;
+        window.firebaseOnValue = onValue;
+        window.firebaseOnDisconnect = onDisconnect;
+    </script>
+</head>
+<body>
 
-joystickZone.addEventListener('touchstart', handleTouchStart, { passive: false });
-joystickZone.addEventListener('touchmove', handleTouchMove, { passive: false });
-joystickZone.addEventListener('touchend', handleTouchEnd, { passive: false });
+    <div id="game-container"></div>
 
-let touchId = null;
-let baseRect;
+    <div id="loading-screen">
+        <h1>Minecraft Mozahid</h1>
+        <div class="loader"></div>
+        <p>Connecting to server...</p>
+    </div>
 
-function handleTouchStart(e) {
-    e.preventDefault();
-    const touch = e.changedTouches[0];
-    touchId = touch.identifier;
-    baseRect = joystickBase.getBoundingClientRect();
-    handleTouchMove(e);
-}
+    <div id="lobby-screen">
+        <div class="lobby-content">
+            <h1>Mozahid's World</h1>
+            <p>Enter your name to join</p>
+            <input type="text" id="player-name-input" placeholder="Your Name..." maxlength="15" autocomplete="off">
+            <button id="join-btn">PLAY MULTIPLAYER</button>
+        </div>
+    </div>
 
-function handleTouchMove(e) {
-    e.preventDefault();
-    for (let i = 0; i < e.touches.length; i++) {
-        if (e.touches[i].identifier === touchId) {
-            const touch = e.touches[i];
-            const centerX = baseRect.left + baseRect.width / 2;
-            const centerY = baseRect.top + baseRect.height / 2;
-            
-            let deltaX = touch.clientX - centerX;
-            let deltaY = touch.clientY - centerY;
-            
-            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-            
-            if (distance > maxDistance) {
-                deltaX = (deltaX / distance) * maxDistance;
-                deltaY = (deltaY / distance) * maxDistance;
-            }
-            
-            joystickKnob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-            
-            // Normalize values (-1 to 1) for movement
-            joystickData.x = deltaX / maxDistance;
-            joystickData.y = deltaY / maxDistance;
-        }
-    }
-}
+    <div id="ui-layer" class="hidden">
+        <div id="crosshair">+</div>
 
-function handleTouchEnd(e) {
-    e.preventDefault();
-    joystickKnob.style.transform = `translate(0px, 0px)`;
-    joystickData = { x: 0, y: 0 };
-    touchId = null;
-}
+        <div id="player-stats">
+            <div class="bar-container"><div id="health-bar" class="bar health"></div></div>
+            <div class="bar-container"><div id="hunger-bar" class="bar hunger"></div></div>
+        </div>
 
-// Jump Button
-const jumpBtn = document.getElementById('btn-jump');
-jumpBtn.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    if (isGrounded) {
-        velocityY = jumpForce;
-        isGrounded = false;
-    }
-});
+        <div id="multiplayer-info">
+            <span id="online-players">Players: 1</span>
+        </div>
 
-// =========================================
-// 7. ANIMATION LOOP (Game Logic)
-// =========================================
-function animate() {
-    requestAnimationFrame(animate);
+        <div id="mobile-controls">
+            <div id="joystick-zone">
+                <div id="joystick-base"><div id="joystick-knob"></div></div>
+            </div>
 
-    if (localPlayer) {
-        // Movement Logic
-        let moveX = 0;
-        let moveZ = 0;
+            <div id="action-buttons">
+                <button class="action-btn" id="btn-jump">JUMP</button>
+                <button class="action-btn" id="btn-mine">MINE</button>
+                <button class="action-btn" id="btn-place">PLACE</button>
+            </div>
+        </div>
 
-        // Keyboard
-        if (keys.w) moveZ -= 1;
-        if (keys.s) moveZ += 1;
-        if (keys.a) moveX -= 1;
-        if (keys.d) moveX += 1;
+        <div id="hotbar">
+            <div class="slot active"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+            <div class="slot"></div>
+        </div>
+    </div>
 
-        // Joystick (Mobile)
-        if (joystickData.x !== 0 || joystickData.y !== 0) {
-            moveX = joystickData.x;
-            moveZ = joystickData.y;
-        }
-
-        // Player Position Update
-        localPlayer.position.x += moveX * playerSpeed;
-        localPlayer.position.z += moveZ * playerSpeed;
-
-        // Player rotation (Jis taraf chal raha hai, us taraf muh ho)
-        if (moveX !== 0 || moveZ !== 0) {
-            const angle = Math.atan2(moveX, moveZ);
-            localPlayer.rotation.y = angle;
-        }
-
-        // Gravity & Jump
-        velocityY += gravity;
-        localPlayer.position.y += velocityY;
-
-        // Ground Collision (Simple)
-        if (localPlayer.position.y <= 1) {
-            localPlayer.position.y = 1;
-            velocityY = 0;
-            isGrounded = true;
-        }
-
-        // Keyboard Jump
-        if (keys.space && isGrounded) {
-            velocityY = jumpForce;
-            isGrounded = false;
-        }
-
-        // Camera ko player ke peeche set karo (Third Person View)
-        // Agar aap first person chahte hain toh yeh logic change hoga
-        camera.position.x = localPlayer.position.x;
-        camera.position.y = localPlayer.position.y + 5;
-        camera.position.z = localPlayer.position.z + 10;
-        camera.lookAt(localPlayer.position);
-    }
-
-    renderer.render(scene, camera);
-}
-
-// =========================================
-// 8. WINDOW RESIZE
-// =========================================
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-// Start the Game!
-init();
-joinBtn.addEventListener('click', joinMultiplayer);
+    <!-- JS Link (Bina folder ke) -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>
