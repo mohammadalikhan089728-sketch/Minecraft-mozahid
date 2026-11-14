@@ -1,101 +1,364 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Minecraft Mozahid</title>
-    
-    <!-- CSS Link (Bina folder ke) -->
-    <link rel="stylesheet" href="style.css">
+import * as THREE from 'three';
 
-    <!-- Three.js Load Karne ke liye (Import Map) -->
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+// High-End Graphics ke liye Imports
+import { Sky } from 'three/addons/objects/Sky.js';
+import { Water } from 'three/addons/objects/Water.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// =========================================
+// 1. FIREBASE SETUP
+// =========================================
+const db = window.firebaseDB;
+const ref = window.firebaseRef;
+const set = window.firebaseSet;
+const onValue = window.firebaseOnValue;
+const onDisconnect = window.firebaseOnDisconnect;
+
+// =========================================
+// 2. VARIABLES
+// =========================================
+let scene, camera, renderer, composer;
+let localPlayer, water, sky;
+const otherPlayers = {}; 
+
+const playerSpeed = 0.2;
+const gravity = -0.02;
+const jumpForce = 0.5;
+let velocityY = 0;
+let isGrounded = true;
+
+const lobbyScreen = document.getElementById('lobby-screen');
+const loadingScreen = document.getElementById('loading-screen');
+const uiLayer = document.getElementById('ui-layer');
+const joinBtn = document.getElementById('join-btn');
+const nameInput = document.getElementById('player-name-input');
+
+let myId = "player_" + Math.floor(Math.random() * 1000000);
+let myName = "Guest";
+
+const keys = { w: false, a: false, s: false, d: false, space: false };
+let joystickData = { x: 0, y: 0 };
+
+// =========================================
+// 3. WORLD GENERATION
+// =========================================
+class World {
+    constructor(scene) {
+        this.scene = scene;
+        this.worldSize = 25; 
+        this.blocks = [];
+        this.mesh = null;
+        this.generateWorld();
+    }
+
+    generateWorld() {
+        for (let x = 0; x < this.worldSize; x++) {
+            for (let z = 0; z < this.worldSize; z++) {
+                let height = Math.floor(Math.sin(x * 0.3) * Math.cos(z * 0.3) * 3) + 3;
+                for (let y = 0; y < height; y++) {
+                    this.blocks.push({ x, y, z });
+                }
             }
         }
-    </script>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onValue, onDisconnect } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        // PBR Material (Physically Based Rendering) realistic light ke liye
+        const material = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.9, metalness: 0.1 });
 
-        const FIREBASE_CONFIG = {
-            apiKey: "AIzaSyB-UdPysk2hYPf75cx8IAkJzivpbuCQcnc",
-            authDomain: "v8-wala-engine-hai.firebaseapp.com",
-            databaseURL: "https://v8-wala-engine-hai-default-rtdb.asia-southeast1.firebasedatabase.app",
-            projectId: "v8-wala-engine-hai",
-            storageBucket: "v8-wala-engine-hai.appspot.com",
-            messagingSenderId: "67142036156",
-            appId: "1:67142036156:web:dbc35b215283e1cff67eb9"
-        };
+        this.mesh = new THREE.InstancedMesh(geometry, material, this.blocks.length);
+        this.mesh.castShadow = true;
+        this.mesh.receiveShadow = true;
 
-        const app = initializeApp(FIREBASE_CONFIG);
-        const db = getDatabase(app);
+        const dummy = new THREE.Object3D();
+        this.blocks.forEach((block, index) => {
+            dummy.position.set(block.x + 0.5, block.y + 0.5, block.z + 0.5);
+            dummy.updateMatrix();
+            this.mesh.setMatrixAt(index, dummy.matrix);
+        });
 
-        window.firebaseDB = db;
-        window.firebaseRef = ref;
-        window.firebaseSet = set;
-        window.firebaseOnValue = onValue;
-        window.firebaseOnDisconnect = onDisconnect;
-    </script>
-</head>
-<body>
+        this.scene.add(this.mesh);
+    }
+}
 
-    <div id="game-container"></div>
+// =========================================
+// 4. INITIALIZE SCENE & HIGH GRAPHICS
+// =========================================
+function init() {
+    scene = new THREE.Scene();
 
-    <div id="loading-screen">
-        <h1>Minecraft Mozahid</h1>
-        <div class="loader"></div>
-        <p>Connecting to server...</p>
-    </div>
+    // Camera
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    
+    // Renderer Setup
+    renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Mobile par zyada load na ho
+    renderer.shadowMap.enabled = true; 
+    renderer.toneMapping = THREE.ACESFilmicToneMapping; // Cinematic Colors
+    renderer.toneMappingExposure = 0.6;
+    document.getElementById('game-container').appendChild(renderer.domElement);
 
-    <div id="lobby-screen">
-        <div class="lobby-content">
-            <h1>Mozahid's World</h1>
-            <p>Enter your name to join</p>
-            <input type="text" id="player-name-input" placeholder="Your Name..." maxlength="15" autocomplete="off">
-            <button id="join-btn">PLAY MULTIPLAYER</button>
-        </div>
-    </div>
+    // --- 1. SUNSET SKY SETUP ---
+    sky = new Sky();
+    sky.scale.setScalar(450000);
+    scene.add(sky);
 
-    <div id="ui-layer" class="hidden">
-        <div id="crosshair">+</div>
+    const sun = new THREE.Vector3();
+    const uniforms = sky.material.uniforms;
+    uniforms['turbidity'].value = 10;
+    uniforms['rayleigh'].value = 2;
+    uniforms['mieCoefficient'].value = 0.005;
+    uniforms['mieDirectionalG'].value = 0.8;
 
-        <div id="player-stats">
-            <div class="bar-container"><div id="health-bar" class="bar health"></div></div>
-            <div class="bar-container"><div id="hunger-bar" class="bar hunger"></div></div>
-        </div>
+    // Sun ki position (Sunset ke liye neeche)
+    const elevation = 2; // Thoda neeche
+    const azimuth = 180;
+    const phi = THREE.MathUtils.degToRad(90 - elevation);
+    const theta = THREE.MathUtils.degToRad(azimuth);
+    sun.setFromSphericalCoords(1, phi, theta);
+    uniforms['sunPosition'].value.copy(sun);
 
-        <div id="multiplayer-info">
-            <span id="online-players">Players: 1</span>
-        </div>
+    // --- 2. REALISTIC WATER SETUP ---
+    const waterGeometry = new THREE.PlaneGeometry(10000, 10000);
+    water = new Water(waterGeometry, {
+        textureWidth: 512,
+        textureHeight: 512,
+        waterNormals: new THREE.TextureLoader().load('https://threejs.org/examples/textures/waternormals.jpg', function (texture) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        }),
+        sunDirection: new THREE.Vector3(),
+        sunColor: 0xffffff,
+        waterColor: 0x001e0f, // Gehra samundar ka color
+        distortionScale: 3.7,
+        fog: scene.fog !== undefined
+    });
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -0.5; // Zameen se thoda neeche
+    scene.add(water);
 
-        <div id="mobile-controls">
-            <div id="joystick-zone">
-                <div id="joystick-base"><div id="joystick-knob"></div></div>
-            </div>
+    // --- 3. LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
 
-            <div id="action-buttons">
-                <button class="action-btn" id="btn-jump">JUMP</button>
-                <button class="action-btn" id="btn-mine">MINE</button>
-                <button class="action-btn" id="btn-place">PLACE</button>
-            </div>
-        </div>
+    const sunLight = new THREE.DirectionalLight(0xffddaa, 2); // Sunset wali peeli roshni
+    sunLight.position.set(20, 10, 10);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 1024;
+    sunLight.shadow.mapSize.height = 1024;
+    sunLight.shadow.camera.near = 0.5;
+    sunLight.shadow.camera.far = 50;
+    sunLight.shadow.camera.left = -30;
+    sunLight.shadow.camera.right = 30;
+    sunLight.shadow.camera.top = 30;
+    sunLight.shadow.camera.bottom = -30;
+    scene.add(sunLight);
 
-        <div id="hotbar">
-            <div class="slot active"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-            <div class="slot"></div>
-        </div>
-    </div>
+    // --- 4. POST-PROCESSING (BLOOM EFFECT) ---
+    // Isse roshni chamkegi (jaise lantern ya sun)
+    composer = new EffectComposer(renderer);
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
 
-    <!-- JS Link (Bina folder ke) -->
-    <script type="module" src="main.js"></script>
-</body>
-</html>
+    const bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.5, // Strength
+        0.4, // Radius
+        0.85 // Threshold
+    );
+    composer.addPass(bloomPass);
+
+    // World aur Player load karo
+    const gameWorld = new World(scene);
+    localPlayer = createPlayerMesh(0xff0000); 
+    localPlayer.position.set(12, 10, 12); 
+    scene.add(localPlayer);
+
+    loadingScreen.classList.add('hidden');
+    animate();
+}
+
+function createPlayerMesh(color) {
+    const geometry = new THREE.BoxGeometry(1, 2, 1);
+    const material = new THREE.MeshStandardMaterial({ color: color, roughness: 0.5 });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.castShadow = true;
+    return mesh;
+}
+
+// =========================================
+// 5. MULTIPLAYER LOGIC
+// =========================================
+function joinMultiplayer() {
+    myName = nameInput.value.trim() || "Player_" + Math.floor(Math.random() * 1000);
+    lobbyScreen.classList.add('hidden');
+    uiLayer.classList.remove('hidden');
+
+    const playerRef = ref(db, 'players/' + myId);
+    set(playerRef, { name: myName, x: localPlayer.position.x, y: localPlayer.position.y, z: localPlayer.position.z });
+    onDisconnect(playerRef).remove();
+
+    onValue(ref(db, 'players'), (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        document.getElementById('online-players').innerText = `Players: ${Object.keys(data).length}`;
+
+        for (let id in data) {
+            if (id !== myId) {
+                if (!otherPlayers[id]) {
+                    const otherMesh = createPlayerMesh(0x0000ff); 
+                    scene.add(otherMesh);
+                    otherPlayers[id] = otherMesh;
+                }
+                otherPlayers[id].position.lerp(new THREE.Vector3(data[id].x, data[id].y, data[id].z), 0.3);
+            }
+        }
+        
+        for (let id in otherPlayers) {
+            if (!data[id]) {
+                scene.remove(otherPlayers[id]);
+                delete otherPlayers[id];
+            }
+        }
+    });
+
+    setInterval(() => {
+        if(localPlayer) {
+            set(playerRef, { name: myName, x: localPlayer.position.x, y: localPlayer.position.y, z: localPlayer.position.z });
+        }
+    }, 100);
+}
+
+// =========================================
+// 6. CONTROLS
+// =========================================
+window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'w') keys.w = true;
+    if (e.key.toLowerCase() === 'a') keys.a = true;
+    if (e.key.toLowerCase() === 's') keys.s = true;
+    if (e.key.toLowerCase() === 'd') keys.d = true;
+    if (e.code === 'Space') keys.space = true;
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.key.toLowerCase() === 'w') keys.w = false;
+    if (e.key.toLowerCase() === 'a') keys.a = false;
+    if (e.key.toLowerCase() === 's') keys.s = false;
+    if (e.key.toLowerCase() === 'd') keys.d = false;
+    if (e.code === 'Space') keys.space = false;
+});
+
+const joystickBase = document.getElementById('joystick-base');
+const joystickKnob = document.getElementById('joystick-knob');
+const joystickZone = document.getElementById('joystick-zone');
+const maxDistance = 35;
+let touchId = null;
+let baseRect;
+
+joystickZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    touchId = e.changedTouches[0].identifier;
+    baseRect = joystickBase.getBoundingClientRect();
+}, { passive: false });
+
+joystickZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (let i = 0; i < e.touches.length; i++) {
+        if (e.touches[i].identifier === touchId) {
+            const touch = e.touches[i];
+            const centerX = baseRect.left + baseRect.width / 2;
+            const centerY = baseRect.top + baseRect.height / 2;
+            let deltaX = touch.clientX - centerX;
+            let deltaY = touch.clientY - centerY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            if (distance > maxDistance) {
+                deltaX = (deltaX / distance) * maxDistance;
+                deltaY = (deltaY / distance) * maxDistance;
+            }
+            joystickKnob.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            joystickData.x = deltaX / maxDistance;
+            joystickData.y = deltaY / maxDistance;
+        }
+    }
+}, { passive: false });
+
+joystickZone.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    joystickKnob.style.transform = `translate(0px, 0px)`;
+    joystickData = { x: 0, y: 0 };
+    touchId = null;
+}, { passive: false });
+
+document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    if (isGrounded) { velocityY = jumpForce; isGrounded = false; }
+});
+
+// =========================================
+// 7. ANIMATION LOOP
+// =========================================
+const clock = new THREE.Clock();
+
+function animate() {
+    requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
+
+    // Pani ko lehrane ke liye (Water Animation)
+    if (water) water.material.uniforms['time'].value += delta * 0.5;
+
+    if (localPlayer) {
+        let moveX = 0, moveZ = 0;
+        if (keys.w) moveZ -= 1;
+        if (keys.s) moveZ += 1;
+        if (keys.a) moveX -= 1;
+        if (keys.d) moveX += 1;
+
+        if (joystickData.x !== 0 || joystickData.y !== 0) {
+            moveX = joystickData.x;
+            moveZ = joystickData.y;
+        }
+
+        localPlayer.position.x += moveX * playerSpeed;
+        localPlayer.position.z += moveZ * playerSpeed;
+
+        if (moveX !== 0 || moveZ !== 0) {
+            localPlayer.rotation.y = Math.atan2(moveX, moveZ);
+        }
+
+        velocityY += gravity;
+        localPlayer.position.y += velocityY;
+
+        if (localPlayer.position.y <= 1) { 
+            localPlayer.position.y = 1;
+            velocityY = 0;
+            isGrounded = true;
+        }
+
+        if (keys.space && isGrounded) {
+            velocityY = jumpForce;
+            isGrounded = false;
+        }
+
+        camera.position.x = localPlayer.position.x;
+        camera.position.y = localPlayer.position.y + 6;
+        camera.position.z = localPlayer.position.z + 12;
+        camera.lookAt(localPlayer.position);
+    }
+
+    // Renderer ki jagah Composer use karo (Bloom effect ke liye)
+    composer.render();
+}
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+init();
+joinBtn.addEventListener('click', joinMultiplayer);
